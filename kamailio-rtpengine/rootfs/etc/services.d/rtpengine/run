@@ -1,13 +1,23 @@
 #!/usr/bin/with-contenv bash
-set -e
-IP="${ADVERTISED_IP}"
-if [ -z "$IP" ] || [ "$IP" = "0.0.0.0" ]; then
-  echo "FATAL: ADVERTISED_IP non valido: '$IP'" >&2
+set -euo pipefail
+
+read_env() {
+  local name="$1"
+  if [ -f "/run/s6/container_environment/${name}" ]; then
+    cat "/run/s6/container_environment/${name}"
+  elif [ -f "/var/run/s6/container_environment/${name}" ]; then
+    cat "/var/run/s6/container_environment/${name}"
+  fi
+}
+
+IP="$(read_env ADVERTISED_IP)"
+if [ -z "${IP:-}" ] || [ "$IP" = "0.0.0.0" ]; then
+  echo "FATAL: ADVERTISED_IP non valido: '${IP:-}'" >&2
   exit 1
 fi
 
 exec rtpengine \
-  --interface=${IP} \
+  --interface="${IP}" \
   --listen-ng=127.0.0.1:22222 \
   --port-min=49000 --port-max=50000 \
   --log-level=4 \

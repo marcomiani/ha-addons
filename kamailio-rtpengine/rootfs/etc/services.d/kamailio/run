@@ -1,23 +1,37 @@
 #!/usr/bin/with-contenv bash
-set -e
+set -euo pipefail
 
-# avvia kamailio in background
+read_env() {
+  local name="$1"
+  if [ -f "/run/s6/container_environment/${name}" ]; then
+    cat "/run/s6/container_environment/${name}"
+  elif [ -f "/var/run/s6/container_environment/${name}" ]; then
+    cat "/var/run/s6/container_environment/${name}"
+  fi
+}
+
+export EXT_CARD="$(read_env EXT_CARD)"
+export PWD_CARD="$(read_env PWD_CARD)"
+export EXT_KAM="$(read_env EXT_KAM)"
+export PWD_KAM="$(read_env PWD_KAM)"
+export DAHUA_ADDR="$(read_env DAHUA_ADDR)"
+export ADVERTISED_IP="$(read_env ADVERTISED_IP)"
+
+# Avvia kamailio in background
 kamailio -DD -E -f /etc/kamailio/kamailio.cfg &
 KPID=$!
 
-# attendi socket management pronto
-for i in {1..60}; do
+# Attendi che il socket di management risponda
+for _ in $(seq 1 60); do
   kamcmd core.ps >/dev/null 2>&1 && break || sleep 1
 done
 
-# credenziali per la CARD (htable)
+# Credenziali della CARD (htable)
 kamcmd htable.set cred "${EXT_CARD}" "${PWD_CARD}" || true
 
-# registrazione UAC verso server SIP Dahua (solo tua EXT)
-# NOTE: DAHUA_ADDR%:* estrae l'IP senza porta, Kamailio accetta host senza porta qui
+# Registrazione UAC verso Dahua (solo tua EXT)
 kamcmd uac.reg_del "${EXT_KAM}" "sip:${DAHUA_ADDR%:*}" >/dev/null 2>&1 || true
 kamcmd uac.reg_add "${EXT_KAM}" "sip:${DAHUA_ADDR%:*}" "${EXT_KAM}" "${PWD_KAM}" "sip:${ADVERTISED_IP}:5060" 600
 kamcmd uac.reg_refresh
 
-# resta in foreground
 wait "$KPID"

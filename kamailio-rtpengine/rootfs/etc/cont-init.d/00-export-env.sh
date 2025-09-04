@@ -2,12 +2,8 @@
 set -euo pipefail
 
 OPTS=/data/options.json
-if [ ! -s "$OPTS" ]; then
-  echo "FATAL: $OPTS not found or empty" >&2
-  exit 1
-fi
+[ -s "$OPTS" ] || { echo "FATAL: $OPTS not found or empty" >&2; exit 1; }
 
-# Read options using jq (no bashio)
 WS_PORT="$(jq -r '.ws_port' "$OPTS")"
 ADVERTISED_IP="$(jq -r '.advertised_ip' "$OPTS")"
 DAHUA_ADDR="$(jq -r '.dahua_addr' "$OPTS")"
@@ -16,7 +12,6 @@ PWD_KAM="$(jq -r '.pwd_kam' "$OPTS")"
 EXT_CARD="$(jq -r '.ext_card' "$OPTS")"
 PWD_CARD="$(jq -r '.pwd_card' "$OPTS")"
 
-# Validate
 for v in WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
   val="${!v:-}"
   if [ -z "$val" ] || [ "$val" = "null" ]; then
@@ -25,9 +20,15 @@ for v in WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
   fi
 done
 
+# Esporta nel processo corrente
 export WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD
-echo "env ok: WS_PORT=$WS_PORT ADVERTISED_IP=$ADVERTISED_IP DAHUA_ADDR=$DAHUA_ADDR"
 
+# Rendi le env disponibili ai servizi s6 (paths v2 e v3)
+for dir in /run/s6/container_environment /var/run/s6/container_environment; do
+  mkdir -p "$dir"
+  for v in WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
+    printf '%s' "${!v}" > "${dir}/${v}"
+  done
+done
 
-export WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD
 echo "env ok: WS_PORT=$WS_PORT ADVERTISED_IP=$ADVERTISED_IP DAHUA_ADDR=$DAHUA_ADDR"
