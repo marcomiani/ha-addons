@@ -1,0 +1,23 @@
+#!/command/with-contenv bash
+set -e
+
+# avvia kamailio in background
+kamailio -DD -E -f /etc/kamailio/kamailio.cfg &
+KPID=$!
+
+# attendi socket management pronto
+for i in {1..60}; do
+  kamcmd core.ps >/dev/null 2>&1 && break || sleep 1
+done
+
+# credenziali per la CARD (htable)
+kamcmd htable.set cred "${EXT_CARD}" "${PWD_CARD}" || true
+
+# registrazione UAC verso server SIP Dahua (solo tua EXT)
+# NOTE: DAHUA_ADDR%:* estrae l'IP senza porta, Kamailio accetta host senza porta qui
+kamcmd uac.reg_del "${EXT_KAM}" "sip:${DAHUA_ADDR%:*}" >/dev/null 2>&1 || true
+kamcmd uac.reg_add "${EXT_KAM}" "sip:${DAHUA_ADDR%:*}" "${EXT_KAM}" "${PWD_KAM}" "sip:${ADVERTISED_IP}:5060" 600
+kamcmd uac.reg_refresh
+
+# resta in foreground
+wait "$KPID"

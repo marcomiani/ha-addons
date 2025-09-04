@@ -1,0 +1,26 @@
+name: Kamailio + rtpengine (SIP/WebRTC bridge)
+slug: kamailio-rtpengine
+version: "0.2.0"
+description: WSS/DTLS-SRTP ↔ SIP/UDP+RTP gateway per Dahua; scope sulla tua extension
+arch: [aarch64]
+startup: services
+host_network: true
+privileged: [NET_ADMIN]
+map:
+  - ssl:ro
+options:
+  ws_port: 7443
+  advertised_ip: "192.168.1.114"
+  dahua_addr: "192.168.1.50:5060"
+  ext_kam: "1000"
+  pwd_kam: ""
+  ext_card: "2000"
+  pwd_card: ""
+schema:
+  ws_port: int
+  advertised_ip: str
+  dahua_addr: str
+  ext_kam: str
+  pwd_kam: password
+  ext_card: str
+  pwd_card: password
