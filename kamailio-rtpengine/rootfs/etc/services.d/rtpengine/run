@@ -2,19 +2,11 @@
 set -euo pipefail
 
 read_env() {
-  local name="$1"
-  if [ -f "/run/s6/container_environment/${name}" ]; then
-    cat "/run/s6/container_environment/${name}"
-  elif [ -f "/var/run/s6/container_environment/${name}" ]; then
-    cat "/var/run/s6/container_environment/${name}"
-  fi
+  [ -f "/run/s6/container_environment/$1" ] && cat "/run/s6/container_environment/$1" || true
 }
 
 IP="$(read_env ADVERTISED_IP)"
-if [ -z "${IP:-}" ] || [ "$IP" = "0.0.0.0" ]; then
-  echo "FATAL: ADVERTISED_IP non valido: '${IP:-}'" >&2
-  exit 1
-fi
+[ -n "${IP:-}" ] && [ "$IP" != "0.0.0.0" ] || { echo "FATAL: ADVERTISED_IP non valido"; exit 1; }
 
 exec rtpengine \
   --interface="${IP}" \
@@ -22,4 +14,6 @@ exec rtpengine \
   --port-min=49000 --port-max=50000 \
   --log-level=4 \
   --timeout=60 \
-  --dtls-passive
+  --dtls-passive \
+  --nftables=0 \
+  --iptables=0
