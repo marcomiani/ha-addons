@@ -1,4 +1,18 @@
-#!/usr/bin/with-contenv bashio
+# inside 00-export-env.sh
+# ...
+if [ -f /usr/lib/hassio-addons/base/bashio ]; then
+  source /usr/lib/hassio-addons/base/bashio
+elif [ -f /usr/lib/bashio/bashio.sh ]; then
+  source /usr/lib/bashio/bashio.sh
+elif [ -f /usr/lib/bashio/bashio ]; then
+  source /usr/lib/bashio/bashio
+else
+  echo "FATAL: bashio library not found" >&2; exit 1
+fi
+
+
+
+
 set -e
 
 WS_PORT=$(bashio::config 'ws_port')
