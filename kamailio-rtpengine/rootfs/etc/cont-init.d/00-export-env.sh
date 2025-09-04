@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/with-contenv bashio
 set -e
 
 WS_PORT=$(bashio::config 'ws_port')
