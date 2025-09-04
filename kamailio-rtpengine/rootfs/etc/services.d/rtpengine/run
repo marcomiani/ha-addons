@@ -14,6 +14,4 @@ exec rtpengine \
   --port-min=49000 --port-max=50000 \
   --log-level=4 \
   --timeout=60 \
-  --dtls-passive \
-  --nftables=0 \
-  --iptables=0
+  --dtls-passive
