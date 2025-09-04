@@ -1,4 +1,4 @@
-#!/command/with-contenv bash
+#!/usr/bin/with-contenv bash
 set -e
 mkdir -p /etc/kamailio/tls
 
