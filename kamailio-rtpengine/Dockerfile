@@ -1,4 +1,4 @@
-FROM ghcr.io/hassio-addons/base:18.1
+FROM ghcr.io/hassio-addons/base:18.1.1
 
 # pacchetti necessari (Alpine)
 RUN apk add --no-cache \
