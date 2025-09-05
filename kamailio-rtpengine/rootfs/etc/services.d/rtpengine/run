@@ -8,9 +8,11 @@ read_env() {
 IP="$(read_env ADVERTISED_IP)"
 [ -n "${IP:-}" ] && [ "$IP" != "0.0.0.0" ] || { echo "FATAL: ADVERTISED_IP non valido"; exit 1; }
 
-# Sposta le porte legacy su valori "neutri" (non usati da altri) per evitare il conflitto.
-# Manteniamo SOLO il control NG su 127.0.0.1:22222 (usato da Kamailio).
+# Avvio "pulito": niente nft/iptables, niente daemon extra,
+# sposto eventuali control-ports legacy su numeri innocui
+# e tengo SOLO il control NG (UDP) che Kamailio usa.
 exec rtpengine \
+  --foreground \
   --interface="${IP}" \
   --listen-ng=127.0.0.1:22222 \
   --listen-udp=127.0.0.1:29223 \
@@ -18,4 +20,6 @@ exec rtpengine \
   --port-min=49000 --port-max=50000 \
   --log-level=4 \
   --timeout=60 \
-  --dtls-passive
+  --dtls-passive \
+  --table=-1 \
+  --nftables-chain=
