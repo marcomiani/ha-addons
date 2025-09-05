@@ -8,16 +8,14 @@ read_env() {
 IP="$(read_env ADVERTISED_IP)"
 [ -n "${IP:-}" ] && [ "$IP" != "0.0.0.0" ] || { echo "FATAL: ADVERTISED_IP non valido"; exit 1; }
 
-# Nota: disabilitiamo il controllo legacy TCP/UDP mettendo port=0.
-# Alcune build accettano --listen-udp/--listen-tcp; se l'opzione non esiste, il demone ignora la riga.
+# Sposta le porte legacy su valori "neutri" (non usati da altri) per evitare il conflitto.
+# Manteniamo SOLO il control NG su 127.0.0.1:22222 (usato da Kamailio).
 exec rtpengine \
   --interface="${IP}" \
   --listen-ng=127.0.0.1:22222 \
-  --listen-udp=127.0.0.1:0 \
-  --listen-tcp=127.0.0.1:0 \
+  --listen-udp=127.0.0.1:29223 \
+  --listen-tcp=127.0.0.1:29224 \
   --port-min=49000 --port-max=50000 \
   --log-level=4 \
   --timeout=60 \
-  --dtls-passive \
-  --table=-1 \
-  --nftables-chain=
+  --dtls-passive
