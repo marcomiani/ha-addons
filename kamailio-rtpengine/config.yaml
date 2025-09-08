@@ -1,6 +1,6 @@
 name: Kamailio + rtpengine (SIP/WebRTC bridge)
 slug: kamailio-rtpengine
-version: "0.2.27"
+version: "0.2.28"
 description: WSS/DTLS-SRTP ↔ SIP/UDP+RTP gateway per Dahua; scope sulla tua extension
 arch: [amd64, aarch64]
 startup: services
