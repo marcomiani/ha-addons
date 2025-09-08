@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/hassio-addons/base:14.8.1
 FROM ${BUILD_FROM}
 
 RUN apk add --no-cache \
-  kamailio kamailio-tls kamailio-websocket kamailio-db kamailio-outbound  \
+  kamailio kamailio-tls kamailio-websocket kamailio-db kamailio-outbound kamailio-extras \
   rtpengine gettext
 
 COPY rootfs/ /
