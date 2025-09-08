@@ -20,13 +20,21 @@ for v in WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
   fi
 done
 
+# Split host:port
+DAHUA_HOST="${DAHUA_ADDR%:*}"
+DAHUA_PORT="${DAHUA_ADDR##*:}"
+# fallback se manca la porta
+if [ -z "$DAHUA_PORT" ] || [ "$DAHUA_PORT" = "$DAHUA_ADDR" ]; then
+  DAHUA_PORT="5060"
+fi
+
 # Esporta nel processo corrente
-export WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD
+export WS_PORT ADVERTISED_IP DAHUA_ADDR DAHUA_HOST DAHUA_PORTEXT_KAM PWD_KAM EXT_CARD PWD_CARD
 
 # Rendi le env disponibili ai servizi s6 (paths v2 e v3)
 for dir in /run/s6/container_environment /var/run/s6/container_environment; do
   mkdir -p "$dir"
-  for v in WS_PORT ADVERTISED_IP DAHUA_ADDR EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
+  for v in WS_PORT ADVERTISED_IP DAHUA_ADDR DAHUA_HOST DAHUA_PORT EXT_KAM PWD_KAM EXT_CARD PWD_CARD; do
     printf '%s' "${!v}" > "${dir}/${v}"
   done
 done
