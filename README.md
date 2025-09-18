@@ -13,6 +13,10 @@ This add-on provides a WebRTC-to-SIP bridge that allows Home Assistant users to 
 - Converts media streams between **SRTP (WebRTC)** and **RTP (Dahua/legacy SIP)** via rtpengine.
 - Uses the existing TLS certificates from `/ssl` in Home Assistant (e.g., Let’s Encrypt).
 
+### Aurora 123solar Brigde
+
+This add-on provides a simple method to import in HomeAssitant a group of entities for an Aurora inverter with two arrays. It's tailored on my current configurations.
+
 ## Installation
 
 1. In Home Assistant, go to **Settings → Add-ons → Add-on Store**.

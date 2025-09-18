@@ -1,0 +1,36 @@
+name: "Aurora 123solar MQTT Bridge"
+slug: aurora-123solar-bridge
+version: "0.1.5"
+description: "Polla programlive.php di 123solar e pubblica sensori via MQTT Discovery."
+arch: [aarch64, amd64, armv7]
+startup: application
+init: false
+boot: auto
+hassio_api: true
+# Se usi Mosquitto add-on, questo consente di ottenere host/credenziali automaticamente
+services:
+  - "mqtt:need"
+options:
+  url: "http://192.168.1.200/123solar/programs/programlive.php?invtnum=1"
+  poll_interval: 15
+  discovery_prefix: "homeassistant"
+  base_topic: "solar/aurora"
+  device_name: "Aurora Inverter"
+  unique_prefix: "aurora"
+  mqtt:
+    host: "core-mosquitto"
+    port: 1883
+    username: "ha"
+    password: "change-me"
+schema:
+  url: str
+  poll_interval: int(5,3600)
+  discovery_prefix: str
+  base_topic: str
+  device_name: str
+  unique_prefix: str
+  mqtt:
+    host: str
+    port: int
+    username: str
+    password: str
