@@ -3,7 +3,7 @@ description: >-
   Kamailio SIP gateway: bridges SIP over Secure WebSocket (WSS) to plain SIP/UDP.
   Allows the sipclient-hass integration to work with Dahua doorbells and similar
   SIP servers that only speak UDP/TCP.
-version: "0.1.0"
+version: "0.1.1"
 slug: "mm-kamailio"
 init: false
 

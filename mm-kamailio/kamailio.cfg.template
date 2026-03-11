@@ -7,12 +7,12 @@
 # Flow:
 #   REGISTER (tablet → WSS):
 #     1. Add connection alias to Contact (for routing back)
-#     2. Store aliased WSS contact in htable keyed by SIP user
+#     2. Store aliased WSS contact in usrloc (registrar module, no reply yet)
 #     3. Replace Contact with Kamailio's UDP address (so Dahua stores us)
-#     4. Forward REGISTER to Dahua via UDP
+#     4. Forward REGISTER to Dahua via UDP; relay Dahua's reply to the tablet
 #
 #   INVITE from Dahua (UDP → Kamailio):
-#     1. Look up SIP user in htable → get WSS contact with alias
+#     1. lookup("location") → R-URI set to aliased WSS contact
 #     2. Decode alias (handle_ruri_alias) → resolves to actual WSS connection
 #     3. Relay to tablet over WSS
 #
@@ -36,6 +36,9 @@ log_facility=LOG_LOCAL0
 
 fork=yes
 children=4
+
+# Required to activate the TLS transport loaded by kamailio-tls
+enable_tls=1
 
 ####### Network #########
 
@@ -63,7 +66,8 @@ loadmodule "tls.so"
 loadmodule "xhttp.so"
 loadmodule "websocket.so"
 loadmodule "nathelper.so"
-loadmodule "htable.so"
+loadmodule "usrloc.so"
+loadmodule "registrar.so"
 loadmodule "rtpengine.so"
 
 ####### Module Parameters #########
@@ -89,10 +93,9 @@ modparam("websocket", "keepalive_mechanism", 1)
 modparam("websocket", "keepalive_timeout", 180)
 modparam("websocket", "keepalive_processes", 1)
 
-# ----- htable -----
-# In-memory table: SIP user → WSS contact URI (with alias for connection routing)
-# autoexpire matches the maximum REGISTER expiry so stale entries self-clean
-modparam("htable", "htable", "wss_contacts=>size=4;autoexpire=3600")
+# ----- usrloc -----
+# Keep all registrations in memory only (no database backend needed)
+modparam("usrloc", "db_mode", 0)
 
 # ----- rtpengine -----
 # Control socket must match --listen-ng in run.sh
@@ -158,9 +161,14 @@ route[HANDLE_REGISTER] {
         # Encode source IP/port/proto into Contact so we can route back later
         set_contact_alias();
 
-        # Store the aliased WSS contact URI keyed by the SIP username
-        $sht(wss_contacts=>$tU) = $(ct{tobody.uri});
-        xlog("L_INFO", "Stored WSS contact[$tU] = $sht(wss_contacts=>$tU)\n");
+        # Save the aliased WSS contact locally.
+        # Flag 2 (NOREPLY) means we do NOT send a 200 OK from here:
+        # Dahua's reply will be relayed back to the WSS client instead.
+        if (!save("location", 2)) {
+            xlog("L_ERR", "usrloc save failed for $tU\n");
+            sl_reply_error();
+            exit;
+        }
 
         # Point the REGISTER at Dahua
         $ru = "sip:$tU@%%DAHUA_IP%%:%%DAHUA_PORT%%";
@@ -200,15 +208,14 @@ route[HANDLE_REQUEST] {
     # Dahua → tablet: look up WSS contact stored during REGISTER
     xlog("L_INFO", "UDP→WSS: $rm to user=$rU (from $si)\n");
 
-    if ($sht(wss_contacts=>$rU) == $null) {
-        xlog("L_WARN", "No WSS contact for user $rU\n");
+    # lookup() replaces R-URI with the aliased WSS contact saved during REGISTER
+    if (!lookup("location")) {
+        xlog("L_WARN", "No registered WSS contact for user $rU\n");
         sl_send_reply("404", "Not Found");
         exit;
     }
 
-    # Restore the aliased URI into $ru and let handle_ruri_alias() decode
-    # the alias parameter → sets $du to the actual WSS connection endpoint
-    $ru = $sht(wss_contacts=>$rU);
+    # Decode the alias parameter in R-URI → sets $du to the actual WSS connection
     if (!handle_ruri_alias()) {
         xlog("L_ERR", "handle_ruri_alias() failed for $ru\n");
         sl_send_reply("500", "Alias Decode Error");

@@ -64,7 +64,7 @@ bashio::log.info "Starting rtpengine on ${MY_IP}..."
 # --no-fallback: hard-fail if port binding fails rather than silently degrading
 rtpengine \
     --interface "${MY_IP}" \
-    --listen-ng "udp:127.0.0.1:2223" \
+    --listen-ng "127.0.0.1:2223" \
     --log-level 5 \
     --no-fallback \
     --foreground &
