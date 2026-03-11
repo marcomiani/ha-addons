@@ -66,7 +66,6 @@ rtpengine \
     --interface "${MY_IP}" \
     --listen-ng "127.0.0.1:2223" \
     --log-level 5 \
-    --no-fallback \
     --foreground &
 
 RTPENGINE_PID=$!

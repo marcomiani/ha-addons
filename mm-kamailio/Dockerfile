@@ -6,6 +6,7 @@ FROM $BUILD_FROM
 # kamailio-tls      : TLS transport
 # kamailio-websocket: WebSocket / WSS support + xhttp
 # kamailio-extras   : nathelper, htable, tmx, rtpengine.so and other extras
+# kamailio-db       : usrloc, registrar, and other database-capable modules (db_mode=0 = memory-only)
 # kamailio-utils    : additional utilities
 # rtpengine         : RTP/media relay daemon (NAT traversal + WebRTC↔RTP bridging)
 # iproute2          : ip(8) command used in run.sh to detect local IP
@@ -14,6 +15,7 @@ RUN apk add --no-cache \
     kamailio-tls \
     kamailio-websocket \
     kamailio-extras \
+    kamailio-db \
     kamailio-utils \
     rtpengine \
     iproute2
