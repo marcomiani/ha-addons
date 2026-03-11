@@ -1,0 +1,281 @@
+#!KAMAILIO
+#
+# Kamailio SIP Gateway — kamailio.cfg
+#
+# Bridges SIP over Secure WebSocket (WSS) ←→ plain SIP/UDP
+#
+# Flow:
+#   REGISTER (tablet → WSS):
+#     1. Add connection alias to Contact (for routing back)
+#     2. Store aliased WSS contact in htable keyed by SIP user
+#     3. Replace Contact with Kamailio's UDP address (so Dahua stores us)
+#     4. Forward REGISTER to Dahua via UDP
+#
+#   INVITE from Dahua (UDP → Kamailio):
+#     1. Look up SIP user in htable → get WSS contact with alias
+#     2. Decode alias (handle_ruri_alias) → resolves to actual WSS connection
+#     3. Relay to tablet over WSS
+#
+#   INVITE from tablet (WSS → Kamailio):
+#     1. Forward to Dahua via UDP
+#
+#   In-dialog (ACK, BYE, etc.):
+#     Handled via loose routing (Record-Route)
+#
+# Placeholders replaced by run.sh:
+#   %%DAHUA_IP%%   - Dahua SIP server IP
+#   %%DAHUA_PORT%% - Dahua SIP server UDP port
+#   %%MY_IP%%      - This server's IP (reachable from Dahua)
+#   %%WSS_PORT%%   - TLS port for WSS connections from the tablet
+
+####### Global Parameters #########
+
+debug=2
+log_stderror=yes
+log_facility=LOG_LOCAL0
+
+fork=yes
+children=4
+
+####### Network #########
+
+listen=udp:0.0.0.0:5060
+listen=tls:0.0.0.0:%%WSS_PORT%%
+
+# Declare our own addresses so Kamailio knows what is "local"
+alias=%%MY_IP%%
+
+####### Modules #########
+
+loadmodule "sl.so"
+loadmodule "tm.so"
+loadmodule "tmx.so"
+loadmodule "rr.so"
+loadmodule "pv.so"
+loadmodule "maxfwd.so"
+loadmodule "textops.so"
+loadmodule "siputils.so"
+loadmodule "xlog.so"
+loadmodule "sanity.so"
+loadmodule "ctl.so"
+loadmodule "corex.so"
+loadmodule "tls.so"
+loadmodule "xhttp.so"
+loadmodule "websocket.so"
+loadmodule "nathelper.so"
+loadmodule "htable.so"
+loadmodule "rtpengine.so"
+
+####### Module Parameters #########
+
+# ----- tm -----
+modparam("tm", "failure_reply_mode", 3)
+modparam("tm", "fr_timer",     30000)
+modparam("tm", "fr_inv_timer", 120000)
+
+# ----- rr -----
+modparam("rr", "enable_full_lr", 1)
+modparam("rr", "append_fromtag", 0)
+
+# ----- nathelper -----
+modparam("nathelper", "natping_interval", 30)
+modparam("nathelper", "ping_nated_only", 1)
+
+# ----- tls -----
+modparam("tls", "config", "/etc/kamailio/tls.cfg")
+
+# ----- websocket -----
+modparam("websocket", "keepalive_mechanism", 1)
+modparam("websocket", "keepalive_timeout", 180)
+modparam("websocket", "keepalive_processes", 1)
+
+# ----- htable -----
+# In-memory table: SIP user → WSS contact URI (with alias for connection routing)
+# autoexpire matches the maximum REGISTER expiry so stale entries self-clean
+modparam("htable", "htable", "wss_contacts=>size=4;autoexpire=3600")
+
+# ----- rtpengine -----
+# Control socket must match --listen-ng in run.sh
+modparam("rtpengine", "rtpengine_sock", "udp:127.0.0.1:2223")
+
+####### Routing Logic #########
+
+request_route {
+    # --- Basic checks ---
+    if (!mf_process_maxfwd_header(10)) {
+        sl_send_reply("483", "Too Many Hops");
+        exit;
+    }
+    if (!sanity_check("1511", "7")) {
+        xlog("L_WARN", "Malformed SIP from $si:$sp\n");
+        exit;
+    }
+
+    # CANCEL is handled per-transaction
+    if (is_method("CANCEL")) {
+        if (t_check_trans()) {
+            route(RELAY);
+        }
+        exit;
+    }
+
+    # Absorb retransmissions
+    if (!is_method("ACK")) {
+        if (t_precheck_trans()) {
+            t_check_trans();
+            exit;
+        }
+        t_check_trans();
+    }
+
+    # In-dialog requests: loose routing via Record-Route
+    if (has_totag()) {
+        if (loose_route()) {
+            route(RELAY);
+            exit;
+        } else {
+            sl_send_reply("404", "Not Found");
+            exit;
+        }
+    }
+
+    if (is_method("REGISTER")) {
+        route(HANDLE_REGISTER);
+        exit;
+    }
+
+    route(HANDLE_REQUEST);
+    exit;
+}
+
+# ---------------------------------------------------------------------------
+# REGISTER: accept from WSS clients only, proxy to Dahua with UDP contact
+# ---------------------------------------------------------------------------
+route[HANDLE_REGISTER] {
+    if (proto == WSS || proto == WS) {
+        xlog("L_INFO", "REGISTER from WSS: user=$tU src=$si:$sp\n");
+
+        # Encode source IP/port/proto into Contact so we can route back later
+        set_contact_alias();
+
+        # Store the aliased WSS contact URI keyed by the SIP username
+        $sht(wss_contacts=>$tU) = $(ct{tobody.uri});
+        xlog("L_INFO", "Stored WSS contact[$tU] = $sht(wss_contacts=>$tU)\n");
+
+        # Point the REGISTER at Dahua
+        $ru = "sip:$tU@%%DAHUA_IP%%:%%DAHUA_PORT%%";
+        $du = "sip:%%DAHUA_IP%%:%%DAHUA_PORT%%;transport=udp";
+
+        # Replace Contact so Dahua records Kamailio's UDP address as the binding.
+        # Incoming calls from Dahua will therefore arrive at our UDP port.
+        remove_hf("Contact");
+        append_hf("Contact: <sip:$tU@%%MY_IP%%:5060;transport=udp>\r\n");
+
+        if (!t_relay()) {
+            sl_reply_error();
+        }
+        exit;
+    }
+
+    xlog("L_WARN", "REGISTER rejected from $si (non-WSS)\n");
+    sl_send_reply("403", "Forbidden");
+    exit;
+}
+
+# ---------------------------------------------------------------------------
+# Initial out-of-dialog requests (INVITE, MESSAGE, OPTIONS, …)
+# ---------------------------------------------------------------------------
+route[HANDLE_REQUEST] {
+    if (proto == WSS || proto == WS) {
+        # Tablet → Dahua
+        # Strip ICE / DTLS from the SDP so Dahua receives plain RTP.
+        xlog("L_INFO", "WSS→UDP: $rm $ru (from $si:$sp)\n");
+        record_route();
+        $du = "sip:%%DAHUA_IP%%:%%DAHUA_PORT%%;transport=udp";
+        rtpengine_manage("replace-sdp-ip replace-origin ICE=remove DTLS=off RTP/AVP");
+        route(RELAY);
+        exit;
+    }
+
+    # Dahua → tablet: look up WSS contact stored during REGISTER
+    xlog("L_INFO", "UDP→WSS: $rm to user=$rU (from $si)\n");
+
+    if ($sht(wss_contacts=>$rU) == $null) {
+        xlog("L_WARN", "No WSS contact for user $rU\n");
+        sl_send_reply("404", "Not Found");
+        exit;
+    }
+
+    # Restore the aliased URI into $ru and let handle_ruri_alias() decode
+    # the alias parameter → sets $du to the actual WSS connection endpoint
+    $ru = $sht(wss_contacts=>$rU);
+    if (!handle_ruri_alias()) {
+        xlog("L_ERR", "handle_ruri_alias() failed for $ru\n");
+        sl_send_reply("500", "Alias Decode Error");
+        exit;
+    }
+
+    # Add ICE and DTLS-SRTP so the browser (WebRTC) can accept the call.
+    rtpengine_manage("replace-sdp-ip replace-origin ICE=force DTLS=passive");
+
+    record_route();
+    route(RELAY);
+    exit;
+}
+
+# ---------------------------------------------------------------------------
+# Generic relay with transaction hooks
+# ---------------------------------------------------------------------------
+route[RELAY] {
+    if (is_method("INVITE|BYE|UPDATE|SUBSCRIBE")) {
+        if (!t_is_set("branch_route"))  t_on_branch("BRANCH_MANAGE");
+    }
+    if (is_method("INVITE|UPDATE|SUBSCRIBE")) {
+        if (!t_is_set("onreply_route")) t_on_reply("REPLY_MANAGE");
+    }
+    if (is_method("INVITE")) {
+        if (!t_is_set("failure_route")) t_on_failure("FAILURE_MANAGE");
+    }
+
+    if (!t_relay()) {
+        sl_reply_error();
+    }
+    exit;
+}
+
+branch_route[BRANCH_MANAGE] {
+    xdbg("branch[$T_branch_idx] → $ru\n");
+}
+
+onreply_route[REPLY_MANAGE] {
+    xdbg("reply $rs from $si\n");
+    # Update rtpengine with the answer SDP carried in 183 Session Progress
+    # and 200 OK so it can open the correct media ports on both legs.
+    if ((status =~ "18[03]" || status == "200") && has_body("application/sdp")) {
+        rtpengine_manage("replace-sdp-ip replace-origin");
+    }
+}
+
+failure_route[FAILURE_MANAGE] {
+    if (t_is_canceled()) {
+        rtpengine_delete();
+        exit;
+    }
+    rtpengine_delete();
+}
+
+# ---------------------------------------------------------------------------
+# WebSocket HTTP upgrade handshake
+# ---------------------------------------------------------------------------
+event_route[xhttp:request] {
+    set_reply_close();
+    set_reply_no_connect();
+    if (ws_handle_handshake()) {
+        exit;
+    }
+    xhttp_reply("404", "Not Found", "", "");
+}
+
+event_route[websocket:closed] {
+    xlog("L_INFO", "WebSocket closed: $si:$sp\n");
+}
