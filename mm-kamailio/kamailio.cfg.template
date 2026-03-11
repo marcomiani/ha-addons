@@ -50,9 +50,9 @@ alias=%%MY_IP%%
 
 ####### Modules #########
 
-loadmodule "sl.so"
 loadmodule "tm.so"
 loadmodule "tmx.so"
+loadmodule "sl.so"
 loadmodule "rr.so"
 loadmodule "pv.so"
 loadmodule "maxfwd.so"
@@ -65,8 +65,8 @@ loadmodule "corex.so"
 loadmodule "tls.so"
 loadmodule "xhttp.so"
 loadmodule "websocket.so"
-loadmodule "nathelper.so"
 loadmodule "usrloc.so"
+loadmodule "nathelper.so"
 loadmodule "registrar.so"
 loadmodule "rtpengine.so"
 
