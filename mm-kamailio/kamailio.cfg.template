@@ -84,6 +84,7 @@ modparam("rr", "append_fromtag", 0)
 # ----- nathelper -----
 modparam("nathelper", "natping_interval", 30)
 modparam("nathelper", "ping_nated_only", 1)
+modparam("nathelper", "sipping_bflag", 7)
 
 # ----- tls -----
 modparam("tls", "config", "/etc/kamailio/tls.cfg")
@@ -96,6 +97,7 @@ modparam("websocket", "keepalive_processes", 1)
 # ----- usrloc -----
 # Keep all registrations in memory only (no database backend needed)
 modparam("usrloc", "db_mode", 0)
+modparam("usrloc", "nat_bflag", 6)
 
 # ----- rtpengine -----
 # Control socket must match --listen-ng in run.sh
@@ -160,6 +162,9 @@ route[HANDLE_REGISTER] {
 
         # Encode source IP/port/proto into Contact so we can route back later
         set_contact_alias();
+
+        # Mark contact as NAT'd so nathelper pings it to keep the WSS connection alive
+        setbflag(6);
 
         # Save the aliased WSS contact locally.
         # Flag 2 (NOREPLY) means we do NOT send a 200 OK from here:
